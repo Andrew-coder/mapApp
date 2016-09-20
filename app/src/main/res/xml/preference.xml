@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:example="http://schemas.android.com/apk/res/com.example.andri.mapapp">
+
+    <Preference
+        android:key="geolocation"
+        android:summary="@string/increase_precision">
+    </Preference>
+    <com.example.andri.mapapp.Preferences.SeekBarPreference
+        android:key="seekBarPreference"
+        android:title="@string/dialog_title"
+        android:dialogTitle="@string/dialog_title"
+        android:summary="@string/summary"
+        android:persistent="true"
+        android:defaultValue="100"
+        example:minValue="50"
+        example:maxValue="500" />
+
+
+    <PreferenceScreen
+        android:key="@string/history"
+        android:summary="@string/history_summary"
+        android:title="@string/map_history">
+        <ListPreference
+            android:key="@string/map_history"
+            android:entries="@array/search_history"
+            android:entryValues="@array/search_history">
+        </ListPreference>
+
+    </PreferenceScreen>
+    <PreferenceScreen
+        android:key="@string/notifications"
+        android:title="@string/notifications"
+        android:summary="@string/notification_settings">
+
+    </PreferenceScreen>
+
+</PreferenceScreen>
