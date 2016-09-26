@@ -1,22 +1,16 @@
 package com.example.andri.mapapp;
 
-import android.app.ActivityManager;
-import android.app.Application;
-import android.app.IntentService;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 
-import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AlertDialog;
@@ -51,17 +45,14 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-import java.util.List;
-
 
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback,PlaceSelectionListener {
     private GoogleMap m_googleMap;
     private EditText edtText;
     private ImageView imgView;
     private LocationManager manager;
-    ServiceConnection sConn;
     Intent serviceIntent;
-
+    private static boolean IS_SERVICE_RUNNING=false;
     private static final String LOG_TAG = "PlaceSelectionListener";
     private static final LatLngBounds BOUNDS_MOUNTAIN_VIEW = new LatLngBounds(
             new LatLng(37.398160, -122.180831), new LatLng(37.430610, -121.972090));
@@ -69,7 +60,6 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private TextView locationTextView;
     private static final String API_KEY = "AIzaSyBYsiDbmlFjNIZGWshDLnW1oqUIfSu3OOc";
     private LatLng target_pos;
-    NotificationService service;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -118,17 +108,6 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         });
     }
 
-    public boolean isServiceRunning(String serviceClassName){
-        final ActivityManager activityManager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
-        final List<ActivityManager.RunningServiceInfo> services = activityManager.getRunningServices(Integer.MAX_VALUE);
-        for (ActivityManager.RunningServiceInfo runningServiceInfo : services) {
-            if (runningServiceInfo.service.getClassName().equals(serviceClassName)){
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public void onPlaceSelected(Place place) {
         Log.i(LOG_TAG, "Place Selected: " + place.getName());
@@ -136,14 +115,14 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         target_pos=place.getLatLng();
         moveCamera(new LatLng(target_pos.latitude,target_pos.longitude));
         addMarker(target_pos);
-        if(isServiceRunning("NotificationService")) {
+        if(IS_SERVICE_RUNNING) {
             new AlertDialog.Builder(this)
                     .setTitle("Навігація")
-                    .setMessage("Ви хочете завершити розпочату навігацію?")
+                    .setMessage("Ви хочете завершити розпочату навігацію і почати нову?")
                     .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface dialog, int which) {
-                            unbindService(sConn);
                             stopService(serviceIntent);
+                            IS_SERVICE_RUNNING=false;
                         }
                     })
                     .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
@@ -152,8 +131,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                     .setIcon(android.R.drawable.ic_dialog_alert)
                     .show();
         }
-        if(checkCurrentLocation())
-            displayDialog();
+        else {
+            if (checkCurrentLocation())
+                displayDialog();
+        }
     }
 
     public void changeCamera(CameraUpdate update, GoogleMap.CancelableCallback callback) {
@@ -165,38 +146,44 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     public void displayDialog(){
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.observation)
-                .setMessage(R.string.ask_observe)
-                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {
-                        sConn = new ServiceConnection() {
-                            public void onServiceConnected(ComponentName name, IBinder binder) {
-                                Log.d(LOG_TAG, "MainActivity onServiceConnected");
-                            }
-
-                            public void onServiceDisconnected(ComponentName name) {
-                                Log.d(LOG_TAG, "MainActivity onServiceDisconnected");
-                            }
-                        };
-                        Intent serviceIntent=new Intent(MainActivity.this, NotificationService.class);
-                        serviceIntent.putExtra("Latitude",target_pos.latitude);
-                        serviceIntent.putExtra("Longtitude",target_pos.longitude);
-                        service=new NotificationService("service");
-                        service.startService(serviceIntent);
-                        service.bindService(serviceIntent,sConn,0);
-                        showNotification("AppMap відстежує...",10);
-
-                    }
-                })
-                .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {}
-                })
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .show();
+        final AlertDialog.Builder builder =new AlertDialog.Builder(this);
+        builder.setTitle(R.string.observation);
+        builder.setMessage(R.string.ask_observe);
+        builder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+            public void onClick(@SuppressWarnings("unused") final DialogInterface dialog, @SuppressWarnings("unused") final int id) {
+                Intent serviceIntent=new Intent(MainActivity.this, NotificationService.class);
+                serviceIntent.putExtra("Latitude",target_pos.latitude);
+                serviceIntent.putExtra("Longtitude",target_pos.longitude);
+                startService(serviceIntent);
+                IS_SERVICE_RUNNING=true;
+                showNotification("AppMap відстежує...",10);
+            }
+        });
+        builder.setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {}
+        });
+        builder.setIcon(android.R.drawable.ic_dialog_alert);
+        final AlertDialog dialog=builder.create();
+        dialog.show();
     }
 
-
+    private void buildAlertMessageNoGps() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage(R.string.GPS_ask_toEnable)
+                .setCancelable(false)
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(@SuppressWarnings("unused") final DialogInterface dialog, @SuppressWarnings("unused") final int id) {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, @SuppressWarnings("unused") final int id) {
+                        dialog.cancel();
+                    }
+                });
+        final AlertDialog alert = builder.create();
+        alert.show();
+    }
 
     @Override
     public void onError(Status status) {
@@ -303,24 +290,6 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         else return true;
     }
 
-    private void buildAlertMessageNoGps() {
-        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setMessage(R.string.GPS_ask_toEnable)
-                .setCancelable(false)
-                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-                    public void onClick(@SuppressWarnings("unused") final DialogInterface dialog, @SuppressWarnings("unused") final int id) {
-                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-                    }
-                })
-                .setNegativeButton("No", new DialogInterface.OnClickListener() {
-                    public void onClick(final DialogInterface dialog, @SuppressWarnings("unused") final int id) {
-                        dialog.cancel();
-                    }
-                });
-        final AlertDialog alert = builder.create();
-        alert.show();
-    }
-
     private void showNotification(String iconTitle, int notificationId) {
 
         NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(this)
@@ -334,6 +303,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         NotificationManager mNotifyMgr = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         mNotifyMgr.notify(notificationId, notification);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopService(serviceIntent);
     }
 }
 

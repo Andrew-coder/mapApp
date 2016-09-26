@@ -22,9 +22,11 @@ public class NotificationService extends IntentService implements LocationListen
     private Location target;
     SharedPreferences sharedPrefs;
     int radius;
-    public NotificationService(String name) {
+    public NotificationService() {super("NotificationService");}
+
+    /*public NotificationService(String name) {
         super(name);
-    }
+    }*/
 
     @Override
     protected void onHandleIntent(Intent intent) {
